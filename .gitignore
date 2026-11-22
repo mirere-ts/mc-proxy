@@ -1,0 +1,21 @@
+# deps
+node_modules/
+
+# 環境変数(実値はコミットしない)
+.env
+.env.*
+
+# Minecraft サーバーの実体(jar・ライブラリ・ワールド・ログ)
+# 再生成できるものなので追跡しない。設定を残したければ !minecraft/server.properties のように除外を足す。
+minecraft/
+
+# 実行時ログ・一時ファイル
+*.log
+tmp/
+*.tmp
+
+# OS / エディタ
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
