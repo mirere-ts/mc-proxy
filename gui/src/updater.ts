@@ -49,11 +49,27 @@ function isPortable(): boolean {
 }
 
 interface ParsedFeed {
-  url: { provider: "github"; owner: string; repo: string } | { provider: "generic"; url: string };
+  url: FeedUrlArg;
   releasePage?: string;
+  /** GitHub provider のときの軽量チェック用 API URL(portable 環境で latest.yml 無しに確認するため)。 */
+  api?: string;
 }
 
 type FeedUrlArg = Parameters<typeof autoUpdater.setFeedURL>[0];
+
+/** 単純な semver 比較(candidate が current より新しいなら true)。prerelease は除外前提。 */
+export function isNewer(candidate: string, current: string): boolean {
+  const parts = (v: string): number[] => {
+    const core = v.trim().replace(/^v/i, "").split("-")[0];
+    return [0, 1, 2].map((i) => {
+      const n = Number.parseInt(core.split(".")[i] ?? "0", 10);
+      return Number.isNaN(n) ? 0 : n;
+    });
+  };
+  const c = parts(candidate);
+  const u = parts(current);
+  return c[0] !== u[0] ? c[0] > u[0] : c[1] !== u[1] ? c[1] > u[1] : c[2] > u[2];
+}
 
 export function parseFeedUrl(raw: string): ParsedFeed | null {
   const url = String(raw ?? "").trim();
@@ -64,10 +80,11 @@ export function parseFeedUrl(raw: string): ParsedFeed | null {
     return {
       url: { provider: "github", owner, repo },
       releasePage: `https://github.com/${owner}/${repo}/releases/latest`,
+      api: `https://api.github.com/repos/${owner}/${repo}/releases/latest`,
     };
   }
   if (!/^https?:\/\//i.test(url)) return null;
-  // 末尾のファイル名まで含めて渡す(generic provider はその場所の latest*.yml を読む)。
+  // generic provider は URL 直下の latest*.yml を読む(ファイル名まで含めない)。
   return { url: { provider: "generic", url } };
 }
 
@@ -118,6 +135,31 @@ export function createUpdater(notify: (state: UpdateState) => void): UpdaterHand
 
   let running: Promise<UpdateState> | null = null;
 
+  /** portable 環境向けの軽量チェック。GitHub API で最新リリースのバージョンだけを見る。 */
+  async function checkManually(feed: ParsedFeed): Promise<void> {
+    if (!feed.api) throw new Error("この確認先では portable 版の更新確認ができません");
+    const res = await fetch(feed.api, {
+      headers: { "User-Agent": "mc-proxy-console-updater", Accept: "application/vnd.github+json" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error("確認先にリリース情報が見つかりません");
+    const release = (await res.json()) as { tag_name?: string; html_url?: string; body?: string };
+    const latest = String(release.tag_name ?? "").trim().replace(/^v/, "");
+    if (!latest) throw new Error("リリース情報にバージョンがありません");
+    if (isNewer(latest, state.current)) {
+      set({
+        status: "available",
+        latest,
+        notes: typeof release.body === "string" ? release.body : undefined,
+        releasePage: release.html_url ?? feed.releasePage,
+        percent: undefined,
+        error: undefined,
+      });
+    } else {
+      set({ status: "up-to-date", latest: undefined, notes: undefined, percent: undefined, error: undefined });
+    }
+  }
+
   async function check(feedUrl: string): Promise<UpdateState> {
     if (running) return running;
     const feed = parseFeedUrl(feedUrl);
@@ -130,8 +172,24 @@ export function createUpdater(notify: (state: UpdateState) => void): UpdaterHand
       set({ status: "error", percent: undefined, error: "開発モードでは更新チェックを実行できません" });
       return { ...state };
     }
-    autoUpdater.setFeedURL(feed.url as FeedUrlArg);
     if (feed.releasePage) set({ releasePage: feed.releasePage });
+    if (manualOnly) {
+      // portable は autoUpdater が動かない(メタデータも無い)ので、自前で確認する。
+      running = checkManually(feed)
+        .catch((error: unknown) => {
+          set({
+            status: "error",
+            percent: undefined,
+            error: friendlyUpdaterError(error instanceof Error ? error : new Error(String(error))),
+          });
+          return { ...state };
+        })
+        .finally(() => {
+          running = null;
+        });
+      return running;
+    }
+    autoUpdater.setFeedURL(feed.url as FeedUrlArg);
     running = autoUpdater.checkForUpdates().then(
       () => ({ ...state }),
       (error: unknown) => {
