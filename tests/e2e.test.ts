@@ -282,6 +282,55 @@ async function main(): Promise<void> {
       client.destroy();
     });
 
+
+    console.log("e2e: continuity under drops");
+
+    // 通信中に WS を何度も切っても、クライアントが受け取るバイト列が
+    // 1 バイトも欠けず重複もしないこと(§10.5 連番 + リプレイの回帰テスト)。
+    // 切断の瞬間に「送ったけど届いたか分からない」フレームができる状況を再現する。
+    await check("the byte stream stays continuous across repeated WS drops", async () => {
+      const client = new TcpClient(bridgePort);
+      const handshake = encodeHandshake(767, "mc.example.com", 25565, 2);
+      client.write(handshake);
+      await client.until((buf) => buf.length >= handshake.length);
+      client.buffer = client.buffer.subarray(handshake.length); // echo 分を捨てる
+
+      // チャンクごとに先頭 2 バイトに連番を付け、16KiB の識別可能な payload を流す。
+      const CHUNK = 16 * 1024;
+      const COUNT = 80;
+      const expectedBytes = COUNT * CHUNK;
+
+      function makeChunk(index: number): Buffer {
+        const buf = Buffer.alloc(CHUNK);
+        buf.writeUInt16LE(index, 0);
+        for (let i = 2; i < CHUNK; i++) buf[i] = (index * 7 + i) & 0xff;
+        return buf;
+      }
+
+      // 書きながらときどき WS を切る(切断の瞬間に両方向でフレームが飛行中になる)。
+      for (let i = 0; i < COUNT; i++) {
+        client.write(makeChunk(i));
+        if (i === 10 || i === 30 || i === 55) {
+          await killSocketsOnServer();
+        }
+        if (i % 5 === 0) await sleep(30);
+      }
+
+      // エコー全体を受け取る。連番が 0..COUNT-1 と一度ずつ、順番どおり来ることを確認する。
+      await client.until((buf) => buf.length >= expectedBytes, 30_000);
+      let echo = client.buffer;
+      for (let i = 0; i < COUNT; i++) {
+        assert.ok(echo.length >= CHUNK, "echo truncated at chunk " + i);
+        const index = echo.readUInt16LE(0);
+        assert.equal(index, i, "echo chunk out of order at position " + i + " got " + index);
+        for (let j = 2; j < CHUNK; j += 4096) {
+          assert.equal(echo[j], (index * 7 + j) & 0xff, "payload mismatch chunk " + i + " byte " + j);
+        }
+        echo = echo.subarray(CHUNK);
+      }
+      client.destroy();
+    });
+
     console.log("e2e: backend down");
 
     for (const socket of backendSockets) socket.destroy();

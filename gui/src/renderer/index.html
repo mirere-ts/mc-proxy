@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:">
+<title>MC Proxy Console</title>
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-cube" aria-hidden="true"><i></i></div>
+      <div class="brand-text"><b>MC Proxy</b><small>Console</small></div>
+    </div>
+    <nav aria-label="機能切り替え">
+      <button class="nav-btn active" data-view="play">
+        <span class="nav-ico" aria-hidden="true">&#9654;</span>
+        <span class="nav-label">遊びに行く<small>ブリッジ</small></span>
+        <span class="nav-dot" id="dot-bridge" data-state="stopped" aria-hidden="true"></span>
+      </button>
+      <button class="nav-btn" data-view="host">
+        <span class="nav-ico" aria-hidden="true">&#9650;</span>
+        <span class="nav-label">公開する<small>WS サーバー</small></span>
+        <span class="nav-dot" id="dot-server" data-state="stopped" aria-hidden="true"></span>
+      </button>
+      <button class="nav-btn" data-view="logs">
+        <span class="nav-ico" aria-hidden="true">&#9776;</span>
+        <span class="nav-label">ログ</span>
+      </button>
+    </nav>
+    <div class="sidebar-foot">
+      <span id="app-version"></span>
+    </div>
+  </aside>
+
+  <main>
+    <!-- ============ 遊びに行く(ブリッジ) ============ -->
+    <section class="view active" id="view-play">
+      <header class="view-head">
+        <div>
+          <h1>遊びに行く</h1>
+          <p class="lead">サーバー主からもらったアドレスを入れて「開始」を押すだけ。Minecraft には <code>localhost</code> で入れるようになります。</p>
+        </div>
+        <span class="pill" id="pill-bridge" data-state="stopped">停止中</span>
+      </header>
+
+      <div class="card">
+        <div class="field">
+          <label for="bridge-url">サーバーのアドレス</label>
+          <input id="bridge-url" type="text" placeholder="wss://mc.example.com" spellcheck="false" autocomplete="off">
+          <p class="hint">サーバー主が教えてくれた URL(wss:// または ws:// で始まります)</p>
+          <p class="field-error" id="err-bridge-url" hidden></p>
+        </div>
+        <div class="row">
+          <div class="field grow">
+            <label for="bridge-port">待ち受けポート</label>
+            <input id="bridge-port" inputmode="numeric" value="25565">
+            <p class="hint">ふだんはそのままで大丈夫です</p>
+            <p class="field-error" id="err-bridge-port" hidden></p>
+          </div>
+          <div class="field autostart">
+            <label class="check"><input type="checkbox" id="bridge-autostart"><span>次回の起動時に自動で開始</span></label>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="bridge-toggle">開始</button>
+          <span class="action-note" id="bridge-note"></span>
+        </div>
+      </div>
+
+      <div class="card success-card" id="bridge-running" hidden>
+        <div class="success-title">&#10003; 接続できます</div>
+        <ol class="steps">
+          <li>Minecraft を起動して <b>マルチプレイ → サーバー追加</b></li>
+          <li>
+            サーバーアドレスに
+            <span class="addr-chip"><code id="bridge-addr">localhost</code><button class="chip-copy" data-copy-target="bridge-addr" title="コピー">コピー</button></span>
+            を入力
+          </li>
+          <li>そのまま参加。回線が切れても自動でつながり直します。</li>
+        </ol>
+        <div class="live-stat">接続中のセッション <b id="bridge-conns">0</b></div>
+      </div>
+
+      <div class="banner error" id="bridge-banner" hidden></div>
+    </section>
+
+    <!-- ============ 公開する(WS サーバー) ============ -->
+    <section class="view" id="view-host">
+      <header class="view-head">
+        <div>
+          <h1>公開する</h1>
+          <p class="lead">Minecraft サーバー(バックエンド)への中継口を開けます。Cloudflare 越しからこの PC に繋がります。</p>
+        </div>
+        <span class="pill" id="pill-server" data-state="stopped">停止中</span>
+      </header>
+
+      <div class="card">
+        <div class="row">
+          <div class="field">
+            <label for="server-port">待ち受けポート</label>
+            <input id="server-port" inputmode="numeric" value="80">
+            <p class="hint">Cloudflare Flexible なら 80</p>
+            <p class="field-error" id="err-server-port" hidden></p>
+          </div>
+          <div class="field grow">
+            <label for="server-wspath">WS パス</label>
+            <input id="server-wspath" value="/minecraft" spellcheck="false">
+            <p class="hint">存在を悟られないよう、変えるのがおすすめ</p>
+            <p class="field-error" id="err-server-wspath" hidden></p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field grow">
+            <label for="server-uphost">バックエンドのアドレス</label>
+            <input id="server-uphost" value="127.0.0.1" spellcheck="false">
+            <p class="hint">Minecraft サーバーと同じ PC なら 127.0.0.1</p>
+            <p class="field-error" id="err-server-uphost" hidden></p>
+          </div>
+          <div class="field">
+            <label for="server-upport">バックエンドのポート</label>
+            <input id="server-upport" inputmode="numeric" value="25565">
+            <p class="field-error" id="err-server-upport" hidden></p>
+          </div>
+        </div>
+        <div class="field autostart">
+          <label class="check"><input type="checkbox" id="server-autostart"><span>次回の起動時に自動で開始</span></label>
+        </div>
+        <div class="actions">
+          <button class="btn primary" id="server-toggle">開始</button>
+          <span class="action-note" id="server-note"></span>
+        </div>
+      </div>
+
+      <div class="card success-card" id="server-running" hidden>
+        <div class="success-title">&#10003; 中継口が開いています</div>
+        <div class="live-stat">
+          待ち受け
+          <span class="addr-chip"><code id="server-addr"></code><button class="chip-copy" data-copy-target="server-addr" title="コピー">コピー</button></span>
+          &nbsp;/&nbsp;セッション <b id="server-sessions">0</b>
+        </div>
+        <p class="next-step">あとは Cloudflare 側の設定です。</p>
+        <ol class="steps">
+          <li>DNS の A レコードをこのマシンの IP に向け、<b>プロキシ(オレンクラウド)</b>を ON</li>
+          <li>SSL/TLS モードを <b>Flexible</b> にする</li>
+          <li>80 番へは <a href="https://www.cloudflare.com/ips" data-ext>Cloudflare の IP 帯</a>だけを通す(これがないと IP を隠せません)</li>
+        </ol>
+        <p class="hint">ブリッジを使う人には「wss://あなたのドメイン」を伝えてください。</p>
+      </div>
+
+      <div class="banner error" id="server-banner" hidden></div>
+    </section>
+
+    <!-- ============ ログ ============ -->
+    <section class="view" id="view-logs">
+      <header class="view-head">
+        <div>
+          <h1>ログ</h1>
+          <p class="lead">何が起きているかの記録です。うまくいかないときは、これをそのまま貼って聞いてください。</p>
+        </div>
+      </header>
+      <div class="card log-card">
+        <div class="log-toolbar">
+          <div class="seg" id="log-filter" role="group" aria-label="ログの絞り込み">
+            <button class="seg-btn active" data-filter="all">すべて</button>
+            <button class="seg-btn" data-filter="bridge">ブリッジ</button>
+            <button class="seg-btn" data-filter="server">サーバー</button>
+            <button class="seg-btn" data-filter="error">エラー</button>
+          </div>
+          <label class="check"><input type="checkbox" id="log-follow" checked><span>自動スクロール</span></label>
+          <span class="spacer"></span>
+          <button class="btn ghost" id="log-copy">コピー</button>
+          <button class="btn ghost" id="log-clear">クリア</button>
+        </div>
+        <pre id="log-view" aria-live="polite"></pre>
+      </div>
+    </section>
+  </main>
+</div>
+<script src="./renderer.js"></script>
+</body>
+</html>

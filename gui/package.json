@@ -1,0 +1,56 @@
+{
+  "name": "mc-proxy-console",
+  "version": "0.1.0",
+  "private": true,
+  "author": "mc-proxy contributors",
+  "type": "module",
+  "description": "mc-proxy の GUI。ブリッジ(遊ぶ側)と WS サーバー(公開側)を 1 つのアプリに内蔵したデスクトップアプリ",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "icon": "node scripts/make-icon.mjs",
+    "build": "node build.mjs",
+    "start": "npm run build && electron .",
+    "dist": "npm run build && electron-builder --linux AppImage --win portable",
+    "dist:linux": "npm run build && electron-builder --linux AppImage",
+    "dist:win": "npm run build && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "app.mcproxy.console",
+    "productName": "MC Proxy Console",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "icon": "build/icon.png",
+    "linux": {
+      "target": "AppImage",
+      "category": "Network",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.png"
+    },
+    "appImage": {
+      "artifactName": "MCProxyConsole-${version}-linux.AppImage"
+    },
+    "portable": {
+      "artifactName": "MCProxyConsole-${version}-win-portable.exe"
+    }
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "electron",
+      "electron-winstaller",
+      "esbuild"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^40.4.1",
+    "electron-builder": "^26.4.0",
+    "esbuild": "^0.28.0"
+  }
+}
