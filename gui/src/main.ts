@@ -9,6 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { startBridge, normalizeBridgeUrl, type BridgeHandle } from "../../bridge/bridge.ts";
 import { startServer, type WsServerHandle } from "../../server/server.ts";
+import { createUpdater, type UpdateState } from "./updater.ts";
 
 // ---------------------------------------------------------------- 設定
 
@@ -30,11 +31,20 @@ interface ServerConfig {
 interface AppConfig {
   bridge: BridgeConfig;
   server: ServerConfig;
+  update: UpdateConfig;
+}
+
+interface UpdateConfig {
+  /** 更新の確認先。GitHub リポジトリ URL(github.com/owner/repo)または generic フィードの URL。 */
+  url: string;
+  /** 起動時に自動で更新を確認するか。 */
+  autoCheck: boolean;
 }
 
 const defaultConfig: AppConfig = {
   bridge: { url: "", port: 25565, host: "127.0.0.1", autoStart: false },
   server: { port: 80, wsPath: "/minecraft", upstreamHost: "127.0.0.1", upstreamPort: 25565, autoStart: false },
+  update: { url: "", autoCheck: true },
 };
 
 let config: AppConfig = JSON.parse(JSON.stringify(defaultConfig));
@@ -49,6 +59,7 @@ function loadConfig(): void {
     config = {
       bridge: { ...defaultConfig.bridge, ...(raw.bridge ?? {}) },
       server: { ...defaultConfig.server, ...(raw.server ?? {}) },
+      update: { ...defaultConfig.update, ...(raw.update ?? {}) },
     };
   } catch {
     config = JSON.parse(JSON.stringify(defaultConfig));
@@ -115,6 +126,36 @@ function emitStatus(): void {
       sessions: serverHandle ? serverHandle.sessions() : 0,
       error: serverError,
     },
+  });
+}
+
+// ---------------------------------------------------------------- 更新
+
+const updater = createUpdater((state) => {
+  send("update", state);
+  if (state.status === "available") {
+    addLog("app", "info", "新しい版 v" + state.latest + (state.manualOnly ? " があります(手動で入れ替えてください)" : " をダウンロードします"));
+  } else if (state.status === "downloaded") {
+    addLog("app", "info", "更新 v" + state.latest + " のダウンロードが完了しました。「更新を適用」で再起動します。");
+  } else if (state.status === "up-to-date") {
+    addLog("app", "info", "v" + state.current + " は最新です");
+  } else if (state.status === "error" && state.error) {
+    addLog("app", "error", "更新の確認に失敗しました: " + state.error);
+  }
+});
+
+/** 更新の確認先。環境変数 MCPROXY_UPDATE_URL があればそちらを優先する。 */
+function feedUrl(): string {
+  return (process.env.MCPROXY_UPDATE_URL ?? "").trim() || config.update.url;
+}
+
+/** 起動時の自動チェック(パッケージ済み・確認先設定済みのときだけ)。 */
+function autoCheckUpdate(): void {
+  if (!app.isPackaged || !config.update.autoCheck || !feedUrl()) return;
+  win?.webContents.once("did-finish-load", () => {
+    setTimeout(() => {
+      void updater.check(feedUrl());
+    }, 3000);
   });
 }
 
@@ -280,6 +321,7 @@ function registerIpc(): void {
     if (partial && typeof partial === "object") {
       if (partial.bridge) config.bridge = { ...config.bridge, ...partial.bridge };
       if (partial.server) config.server = { ...config.server, ...partial.server };
+      if (partial.update) config.update = { ...config.update, ...partial.update };
       saveConfig();
     }
     return config;
@@ -306,6 +348,9 @@ function registerIpc(): void {
     return { ok: true };
   });
   ipcMain.handle("app:info", () => ({ version: app.getVersion(), platform: process.platform }));
+  ipcMain.handle("update:state", () => updater.getState());
+  ipcMain.handle("update:check", () => updater.check(feedUrl()));
+  ipcMain.handle("update:install", () => updater.install());
   ipcMain.handle("shell:open", (_event, raw: unknown) => {
     const url = String(raw ?? "");
     if (!/^https?:\/\//.test(url)) return { ok: false };
@@ -331,6 +376,7 @@ if (!gotLock) {
     loadConfig();
     registerIpc();
     createWindow();
+    autoCheckUpdate();
 
     setInterval(emitStatus, 1000);
 

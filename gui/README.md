@@ -38,6 +38,7 @@ gui/
 ├── src/
 │   ├── main.ts             # メインプロセス。../../bridge/bridge.ts と ../../server/server.ts を
 │   │                       # バンドルして直接内蔵し、IPC で起動・停止・ログ・状態を提供する
+│   ├── updater.ts          # electron-updater のラッパ(自動更新)
 │   ├── preload.ts          # contextBridge で安全な API だけを renderer に渡す
 │   └── renderer/           # index.html / style.css / renderer.ts(vanilla TS、フレームワークなし)
 └── dist/                   # ビルド成果物(main.cjs に bridge+server を同梱)
@@ -50,6 +51,45 @@ gui/
 - **ログ**: 発生源(ブリッジ / サーバー)やエラーだけで絞り込み、コピーもできる。
 
 設定は自動保存され、「次回の起動時に自動で開始」を付けた項目はアプリ起動時にそのまま動き出す。
+
+## 更新
+
+アプリは electron-updater による自動更新に対応しています。
+
+- **Linux(AppImage)**: 起動時とサイドバーの「更新を確認」で新しい版を確認 → 見つかれば自動ダウンロード → ダウンロード完了後に「更新を適用」で再起動して適用(未適用のまま終了した場合は次回の終了時に適用)。
+- **Windows(portable exe)**: 仕様上セルフ更新ができないため、確認までを行い新しい版があれば「手動で入れ替え」と表示する。配布ページから新しい exe を取り直してください。
+
+### 確認先の設定
+
+更新の確認先は設定ファイル(`config.json` の `update.url`)で指定します。`config.json` は OS ごとのアプリデータディレクトリにあります(例: Linux なら `~/.config/mc-proxy-console/config.json`)。
+
+```json
+{
+  "update": {
+    "url": "https://github.com/あなた/リポジトリ",
+    "autoCheck": true
+  }
+}
+```
+
+`url` には次のどちらかを書けます:
+
+- **GitHub リポジトリ URL**(`https://github.com/owner/repo`): GitHub Releases に electron-builder の成果物と更新メタデータ(`latest-linux.yml` など)を置いて使う。`pnpm dist` で `gui/release/` に成果物と一緒に生成される。
+- **それ以外の http(s) URL**: generic フィード。その URL 直下に `latest.yml` / `latest-linux.yml`(Windows 向けは `latest.yml`)を置いて使う。GitHub 以外のホスティングに配布物を置く場合用。
+
+`autoCheck` を `false` にすると起動時の自動確認を止める(「更新を確認」ボタンは使える)。
+
+環境変数 `MCPROXY_UPDATE_URL` がある場合は設定より優先される(テストや一時的な切り替え用)。
+
+### リリースの手順
+
+1. `gui/package.json` の `version` を上げる。
+2. `pnpm dist`(または `dist:linux` / `dist:win`)で成果物を作る。
+3. `gui/release/` の実行ファイルと `latest*.yml` を確認先にアップロードする。
+
+### 開発中
+
+開発実行(`pnpm start`)では electron-updater が使えないため、更新確認は「確認に失敗しました」と表示される。パッケージ後(AppImage / exe)に動作する。
 
 ## 仕組み
 

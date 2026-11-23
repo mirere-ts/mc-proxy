@@ -14,8 +14,11 @@ interface McProxyApi {
   logHistory(): Promise<unknown[]>;
   clearLogs(): Promise<unknown>;
   appInfo(): Promise<{ version: string; platform: string }>;
+  updateState(): Promise<UpdateState>;
+  checkUpdates(): Promise<UpdateState>;
+  installUpdate(): Promise<{ ok: boolean; error?: string }>;
   openExternal(url: string): Promise<unknown>;
-  on(channel: "log" | "status", callback: (data: unknown) => void): () => void;
+  on(channel: "log" | "status" | "update", callback: (data: unknown) => void): () => void;
 }
 
 declare global {
@@ -53,6 +56,17 @@ interface LogEntry {
   source: string;
   level: "info" | "error";
   line: string;
+}
+
+interface UpdateState {
+  status: "idle" | "checking" | "up-to-date" | "available" | "downloading" | "downloaded" | "unconfigured" | "error";
+  current: string;
+  latest?: string;
+  notes?: string;
+  percent?: number;
+  releasePage?: string;
+  manualOnly?: boolean;
+  error?: string;
 }
 
 let status: Status = {
@@ -142,6 +156,54 @@ function renderStatus(): void {
 function normalizePath(raw: string): string {
   const trimmed = raw.trim() || "/minecraft";
   return trimmed.startsWith("/") ? trimmed : "/" + trimmed;
+}
+
+// ---------------------------------------------------------------- 更新
+
+function renderUpdate(u: UpdateState): void {
+  const checkBtn = $("update-check") as HTMLButtonElement;
+  const applyBtn = $("update-apply") as HTMLButtonElement;
+  const state = $("update-state") as HTMLElement;
+
+  checkBtn.disabled = u.status === "checking" || u.status === "downloading";
+  checkBtn.textContent = u.status === "checking" ? "確認中…" : u.status === "downloading" ? "ダウンロード中…" : "更新を確認";
+
+  applyBtn.hidden = u.status !== "downloaded";
+
+  let text = "";
+  let cls = "";
+  switch (u.status) {
+    case "available":
+      text = "新しい版 v" + (u.latest ?? "?") + (u.manualOnly ? "(手動で入れ替え)" : "");
+      cls = "u-available";
+      break;
+    case "downloading":
+      text = "ダウンロード中 " + Math.round(u.percent ?? 0) + "%";
+      cls = "u-available";
+      break;
+    case "downloaded":
+      text = "更新の準備ができました";
+      cls = "u-available";
+      break;
+    case "up-to-date":
+      text = "最新です";
+      break;
+    case "unconfigured":
+      text = "更新の確認先が未設定です";
+      break;
+    case "error":
+      text = "更新の確認に失敗しました";
+      cls = "u-error";
+      break;
+    case "idle":
+    case "checking":
+      text = "";
+      break;
+  }
+  state.hidden = text === "";
+  state.textContent = text;
+  state.className = "update-state" + (cls ? " " + cls : "");
+  if (u.status === "error" && u.error) state.title = u.error;
 }
 
 // ---------------------------------------------------------------- 検証
@@ -382,6 +444,10 @@ async function init(): Promise<void> {
   const info = await api.appInfo();
   $("app-version").textContent = "MC Proxy Console v" + info.version;
 
+  // 更新の状態(履歴 + push)
+  renderUpdate(await api.updateState());
+  api.on("update", (data) => renderUpdate(data as UpdateState));
+
   // ログ履歴
   const history = await api.logHistory();
   for (const entry of history as LogEntry[]) appendLog(entry);
@@ -401,6 +467,14 @@ async function init(): Promise<void> {
 
   ($("bridge-toggle") as HTMLButtonElement).addEventListener("click", () => void toggleBridge());
   ($("server-toggle") as HTMLButtonElement).addEventListener("click", () => void toggleServer());
+
+  // 更新
+  ($("update-check") as HTMLButtonElement).addEventListener("click", () => void api.checkUpdates());
+  ($("update-apply") as HTMLButtonElement).addEventListener("click", () => {
+    void api.installUpdate().then((result) => {
+      if (!result.ok) addLog({ t: new Date().toTimeString().slice(0, 8), source: "app", level: "error", line: result.error ?? "更新の適用に失敗しました" });
+    });
+  });
 
   // Enter でも開始・停止
   for (const id of ["bridge-url", "bridge-port"]) {

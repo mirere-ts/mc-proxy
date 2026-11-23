@@ -1,10 +1,14 @@
 {
   "name": "mc-proxy-console",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "author": "mc-proxy contributors",
   "type": "module",
   "description": "mc-proxy の GUI。ブリッジ(遊ぶ側)と WS サーバー(公開側)を 1 つのアプリに内蔵したデスクトップアプリ",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mirere-ts/mc-proxy.git"
+  },
   "main": "dist/main.cjs",
   "scripts": {
     "icon": "node scripts/make-icon.mjs",
@@ -25,6 +29,9 @@
       "package.json"
     ],
     "icon": "build/icon.png",
+    "publish": {
+      "provider": "github"
+    },
     "linux": {
       "target": "AppImage",
       "category": "Network",
@@ -51,6 +58,7 @@
   "devDependencies": {
     "electron": "^40.4.1",
     "electron-builder": "^26.4.0",
+    "electron-updater": "^6.8.11",
     "esbuild": "^0.28.0"
   }
 }

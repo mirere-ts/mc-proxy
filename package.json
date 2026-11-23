@@ -1,6 +1,6 @@
 {
   "name": "mc-ws-proxy",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
   "description": "Minecraft Java Edition サーバーを Cloudflare(無料・オレンクラウド)越しに WebSocket で公開するプロキシ",

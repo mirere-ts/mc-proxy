@@ -99,7 +99,17 @@ nav { display: flex; flex-direction: column; gap: 4px; }
   padding: 10px 8px 2px;
   color: #5b6674;
   font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
+#update-check, #update-apply { padding: 5px 10px; font-size: 11.5px; }
+#update-apply { color: var(--accent); border-color: rgba(78,192,109,0.5); }
+#update-apply:hover { color: var(--accent); border-color: var(--accent); }
+.update-state { line-height: 1.5; min-height: 14px; }
+.update-state.u-available { color: var(--accent); }
+.update-state.u-error { color: var(--danger); }
 
 /* ---------- メイン ---------- */
 main { flex: 1; overflow-y: auto; }
