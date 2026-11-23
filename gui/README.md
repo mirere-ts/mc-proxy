@@ -61,12 +61,14 @@ gui/
 
 ### 確認先の設定
 
-更新の確認先は設定ファイル(`config.json` の `update.url`)で指定します。`config.json` は OS ごとのアプリデータディレクトリにあります(例: Linux なら `~/.config/mc-proxy-console/config.json`)。
+既定ではこのリポジトリ(`https://github.com/mirere-ts/mc-proxy`)の Releases を確認します。設定は不要です。
+
+確認先を変えるときだけ設定ファイル(`config.json` の `update.url`)を編集します。`config.json` は OS ごとのアプリデータディレクトリにあります(例: Linux なら `~/.config/mc-proxy-console/config.json`)。
 
 ```json
 {
   "update": {
-    "url": "https://github.com/あなた/リポジトリ",
+    "url": "https://github.com/別のowner/別のリポジトリ",
     "autoCheck": true
   }
 }

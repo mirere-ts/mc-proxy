@@ -44,7 +44,7 @@ interface UpdateConfig {
 const defaultConfig: AppConfig = {
   bridge: { url: "", port: 25565, host: "127.0.0.1", autoStart: false },
   server: { port: 80, wsPath: "/minecraft", upstreamHost: "127.0.0.1", upstreamPort: 25565, autoStart: false },
-  update: { url: "", autoCheck: true },
+  update: { url: "https://github.com/mirere-ts/mc-proxy", autoCheck: true },
 };
 
 let config: AppConfig = JSON.parse(JSON.stringify(defaultConfig));
